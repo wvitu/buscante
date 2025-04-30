@@ -1,10 +1,11 @@
 import { FormControl } from '@angular/forms';
-import { Item } from './../../models/interfaces';
+import { Item, LivrosResultado } from './../../models/interfaces';
 import { Component } from '@angular/core';
-import { switchMap, map, tap, filter } from 'rxjs';
+import { switchMap, map, tap, filter, debounceTime, catchError, throwError, EMPTY, of } from 'rxjs';
 import { LivroVolumeInfo } from 'src/app/models/livroVolumeInfo';
 import { LivroService } from 'src/app/service/livro.service';
 
+const PAUSA = 300;
 @Component({
   selector: 'app-lista-livros',
   templateUrl: './lista-livros.component.html',
@@ -13,18 +14,39 @@ import { LivroService } from 'src/app/service/livro.service';
 export class ListaLivrosComponent {
 
   campoBusca = new FormControl()
-  livro: { title: any; authors : any; publisher: any; publishedDate: any; description: any; previewLink: any; thumbnail: any; };
+  mensagemErro = ''
+  livrosResultado: LivrosResultado;
 
   constructor(private service: LivroService) { }
 
-  livrosEncontrados$ = this.campoBusca.valueChanges
+  totalDeLivros$ = this.campoBusca.valueChanges
   .pipe(
+    debounceTime(PAUSA),
     filter((valorDigitado) => valorDigitado.length >= 3),
     tap(() => console.log('Fluxo inicial')),
     switchMap((valorDigitado) => this.service.buscar(valorDigitado)),
-    tap(() => console.log('Requisição ao servidor')),
-    map((items) => this.LivrosResultadoParaLivros(items)
-    )
+    map(resultado => this.livrosResultado = resultado),
+    catchError(erro => {
+      console.log(erro)
+      return of()
+    })
+  )
+
+  livrosEncontrados$ = this.campoBusca.valueChanges
+  .pipe(
+    debounceTime(PAUSA),
+    filter((valorDigitado) => valorDigitado.length >= 3),
+    tap(() => console.log('Fluxo inicial')),
+    switchMap((valorDigitado) => this.service.buscar(valorDigitado)),
+    tap((retornoAPI) => console.log(retornoAPI)),
+    map(resultado => resultado.items ?? []),
+    map((items) => this.LivrosResultadoParaLivros(items)),
+    catchError((erro) => {
+    //   this.mensagemErro = 'Ops, ocorreu um erro, Recarregue a aplicação.'
+    //   return EMPTY
+      console.log(erro)
+      return throwError(() => new Error(this.mensagemErro = 'Ops, ocorreu um erro, Recarregue a aplicação.'))
+    })
   )
 
 
